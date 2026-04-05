@@ -6,20 +6,40 @@ const PAGE_HEIGHT = 297
 const MARGIN_X = 18
 const TOP_MARGIN = 20
 const TABLE_HEADER_HEIGHT = 9
+const SECTION_HEADER_HEIGHT = 8
 const ROW_HEIGHT = 8
 const COL_ITEM = 110
 const COL_QUANTITY = 32
 const COL_UNIT = 32
+const TABLE_WIDTH = COL_ITEM + COL_QUANTITY + COL_UNIT
+
+const drawPageShell = (doc) => {
+  doc.setFillColor(246, 242, 235)
+  doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F')
+  doc.setFillColor(255, 255, 255)
+  doc.roundedRect(10, 10, 190, 277, 6, 6, 'F')
+}
 
 const drawTableHeader = (doc, y) => {
   doc.setFillColor(238, 232, 224)
-  doc.rect(MARGIN_X, y, COL_ITEM + COL_QUANTITY + COL_UNIT, TABLE_HEADER_HEIGHT, 'F')
+  doc.rect(MARGIN_X, y, TABLE_WIDTH, TABLE_HEADER_HEIGHT, 'F')
   doc.setTextColor(55, 48, 41)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   doc.text('Item Name', MARGIN_X + 3, y + 6)
   doc.text('Quantity', MARGIN_X + COL_ITEM + 3, y + 6)
   doc.text('Unit', MARGIN_X + COL_ITEM + COL_QUANTITY + 3, y + 6)
+}
+
+const drawSectionHeader = (doc, y, title) => {
+  doc.setFillColor(252, 238, 214)
+  doc.rect(MARGIN_X, y, TABLE_WIDTH, SECTION_HEADER_HEIGHT, 'F')
+  doc.setDrawColor(230, 225, 218)
+  doc.rect(MARGIN_X, y, TABLE_WIDTH, SECTION_HEADER_HEIGHT)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(146, 94, 10)
+  doc.text(title.toUpperCase(), MARGIN_X + 3, y + 5.4)
 }
 
 const drawTableRow = (doc, y, item) => {
@@ -35,13 +55,10 @@ const drawTableRow = (doc, y, item) => {
   doc.text(item.unit, MARGIN_X + COL_ITEM + COL_QUANTITY + 3, y + 5.4)
 }
 
-export const buildPrepSheetPdf = ({ details, items }) => {
+export const buildPrepSheetPdf = ({ details, items, sections = [] }) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
-  doc.setFillColor(246, 242, 235)
-  doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F')
-  doc.setFillColor(255, 255, 255)
-  doc.roundedRect(10, 10, 190, 277, 6, 6, 'F')
+  drawPageShell(doc)
   doc.setTextColor(71, 63, 55)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
@@ -78,21 +95,49 @@ export const buildPrepSheetPdf = ({ details, items }) => {
   drawTableHeader(doc, currentY)
   currentY += TABLE_HEADER_HEIGHT
 
-  items.forEach((item) => {
-    if (currentY + ROW_HEIGHT > PAGE_HEIGHT - 20) {
-      doc.addPage()
-      doc.setFillColor(246, 242, 235)
-      doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F')
-      doc.setFillColor(255, 255, 255)
-      doc.roundedRect(10, 10, 190, 277, 6, 6, 'F')
-      currentY = TOP_MARGIN
-      drawTableHeader(doc, currentY)
-      currentY += TABLE_HEADER_HEIGHT
+  const printableSections = sections.length
+    ? sections
+    : [
+        {
+          id: 'all-items',
+          name: 'Items',
+          items,
+        },
+      ]
+
+  const addNewPage = () => {
+    doc.addPage()
+    drawPageShell(doc)
+    currentY = TOP_MARGIN
+    drawTableHeader(doc, currentY)
+    currentY += TABLE_HEADER_HEIGHT
+  }
+
+  printableSections.forEach((section) => {
+    if (!section.items.length) return
+
+    if (currentY + SECTION_HEADER_HEIGHT + ROW_HEIGHT > PAGE_HEIGHT - 20) {
+      addNewPage()
     }
 
-    drawTableRow(doc, currentY, item)
-    currentY += ROW_HEIGHT
+    drawSectionHeader(doc, currentY, section.name)
+    currentY += SECTION_HEADER_HEIGHT
+
+    section.items.forEach((item) => {
+      if (currentY + ROW_HEIGHT > PAGE_HEIGHT - 20) {
+        addNewPage()
+        drawSectionHeader(doc, currentY, section.name)
+        currentY += SECTION_HEADER_HEIGHT
+      }
+
+      drawTableRow(doc, currentY, item)
+      currentY += ROW_HEIGHT
+    })
   })
+
+  if (!items.length && currentY + ROW_HEIGHT <= PAGE_HEIGHT - 20) {
+    drawTableRow(doc, currentY, { name: 'No items selected', quantity: '-', unit: '-' })
+  }
 
   return {
     doc,
